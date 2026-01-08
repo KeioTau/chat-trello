@@ -11,7 +11,8 @@ import {
   CheckCircle2,
   ChevronLeft,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  Lock
 } from 'lucide-react';
 
 // Initialisation de l'objet Trello
@@ -22,6 +23,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [needsAuth, setNeedsAuth] = useState(false);
   
   const [rooms, setRooms] = useState<ChatRoom[]>(() => {
     const saved = localStorage.getItem('trello_chat_rooms_v3');
@@ -39,15 +41,41 @@ export default function App() {
   const initTrello = async () => {
     setIsLoading(true);
     setError(null);
+    setNeedsAuth(false);
+    
     try {
-      // Récupérer les membres du tableau avec un timeout ou une gestion d'erreur
-      const membersData = await t.board('members');
-      
-      if (!membersData || !membersData.members) {
-        throw new Error("Impossible de récupérer les membres.");
+      // 1. Tenter de récupérer l'utilisateur actuel (test d'autorisation)
+      let me;
+      try {
+        me = await t.member('id', 'fullName', 'username', 'initials', 'avatarUrl');
+      } catch (authErr) {
+        console.warn("Autorisation manquante pour t.member");
+        setNeedsAuth(true);
+        setIsLoading(false);
+        return;
       }
 
-      const formattedMembers = membersData.members.map((m: any) => ({
+      if (!me || !me.id) {
+        setNeedsAuth(true);
+        setIsLoading(false);
+        return;
+      }
+
+      setCurrentUser({
+        id: me.id,
+        fullName: me.fullName || me.username,
+        username: me.username,
+        avatarUrl: me.avatarUrl,
+        initials: me.initials || me.fullName?.substring(0, 2).toUpperCase() || '??',
+        color: 'bg-gray-800'
+      });
+
+      // 2. Récupérer les membres du tableau
+      const membersData = await t.board('members');
+      // Trello peut renvoyer { members: [...] } ou [...] directement selon le contexte
+      const rawMembers = Array.isArray(membersData) ? membersData : (membersData.members || []);
+
+      const formattedMembers = rawMembers.map((m: any) => ({
         id: m.id,
         fullName: m.fullName || m.username,
         username: m.username,
@@ -67,22 +95,26 @@ export default function App() {
 
       setBoardMembers([...formattedMembers, aiBot]);
 
-      // Récupérer l'utilisateur actuel
-      const me = await t.member('id', 'fullName', 'username', 'initials', 'avatarUrl');
-      setCurrentUser({
-        id: me.id,
-        fullName: me.fullName,
-        username: me.username,
-        avatarUrl: me.avatarUrl,
-        initials: me.initials,
-        color: 'bg-gray-800'
-      });
-
     } catch (err: any) {
-      console.error("Erreur d'initialisation Trello:", err);
-      setError("Erreur d'accès aux données Trello. Vérifiez les autorisations du Power-Up.");
+      console.error("Erreur d'initialisation Trello détaillée:", err);
+      setError("Impossible de charger les données du tableau. Vérifiez vos permissions.");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleAuthorize = async () => {
+    try {
+      await t.authorize({
+        type: 'popup',
+        name: 'Chat Board Pro',
+        expiration: 'never',
+        scope: 'read,write'
+      });
+      // Recharger après autorisation
+      initTrello();
+    } catch (err) {
+      console.error("Erreur lors de l'autorisation:", err);
     }
   };
 
@@ -153,8 +185,8 @@ export default function App() {
     if (activeRoom?.memberIds.includes('user_ai_assistant')) {
       setIsTyping(true);
       try {
-        const history = activeRoom.messages.slice(-10).map(m => ({
-          role: m.senderId === 'user_ai_assistant' ? 'model' as const : 'user' as const,
+        const history = (activeRoom.messages || []).slice(-10).map(m => ({
+          role: (m.senderId === 'user_ai_assistant' ? 'model' : 'user') as 'model' | 'user',
           text: m.text
         }));
         
@@ -184,7 +216,27 @@ export default function App() {
     return (
       <div className="h-full w-full flex flex-col items-center justify-center bg-white gap-4">
         <Loader2 className="animate-spin text-[#0079bf]" size={40} />
-        <p className="text-slate-500 font-medium animate-pulse">Synchronisation Trello...</p>
+        <p className="text-slate-500 font-medium animate-pulse">Initialisation du Chat...</p>
+      </div>
+    );
+  }
+
+  if (needsAuth) {
+    return (
+      <div className="h-full w-full flex flex-col items-center justify-center bg-white p-8 text-center">
+        <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-6">
+          <Lock size={32} />
+        </div>
+        <h2 className="font-bold text-xl mb-2 text-slate-800">Autorisation requise</h2>
+        <p className="text-slate-500 mb-8 max-w-xs mx-auto">
+          Pour discuter avec les autres membres, nous avons besoin de savoir qui vous êtes sur ce tableau.
+        </p>
+        <button 
+          onClick={handleAuthorize} 
+          className="w-full max-w-xs bg-[#0079bf] text-white px-6 py-4 rounded-xl font-bold shadow-lg hover:bg-[#026aa7] transition-all flex items-center justify-center gap-2"
+        >
+          Autoriser l'accès
+        </button>
       </div>
     );
   }
@@ -308,7 +360,7 @@ export default function App() {
                <MessageSquare size={36} className="text-white" />
              </div>
              <h3 className="font-bold text-xl text-slate-800 uppercase tracking-tight">Messagerie Interne</h3>
-             <p className="text-slate-500 text-sm max-w-xs mt-2 mb-8 font-medium">Collaborez instantanément avec les {boardMembers.length - 1} membres de ce tableau.</p>
+             <p className="text-slate-500 text-sm max-w-xs mt-2 mb-8 font-medium">Collaborez instantanément avec les {boardMembers.length > 0 ? boardMembers.length - 1 : 'autres'} membres de ce tableau.</p>
              <button onClick={() => setIsCreatingChat(true)} className="px-10 py-3 bg-[#0079bf] text-white font-bold rounded-xl shadow-lg hover:scale-105 active:scale-95 transition-all">
                NOUVEAU MESSAGE
              </button>
