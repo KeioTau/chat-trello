@@ -7,12 +7,19 @@
   </head>
   <body>
     <script>
-      var CHAT_ICON = './icon.svg';
+      // Icône SVG encodée pour garantir qu'elle s'affiche peu importe l'URL
+      var CHAT_ICON_DATA = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNDQiIGhlaWdodD0iMTQ0IiB2aWV3Qm94PSIwIDAgMTQ0IDE0NCI+PHJlY3Qgd2lkdGg9IjE0NCIgaGVpZ2h0PSIxNDQiIHJ4PSIzMCIgZmlsbD0iIzAwNzliziIvPjxwYXRoIGQ9Ik0xMDUgNzJjMCAxOC4yMjUtMTQuNzc1IDMzLTMzIDMzaC0ybC0xNiAxNnYtMTZjLTExLjE3NSAwLTIwLTguODI1LTIwLTIwIDAgLTExLjE3NSA4LjgyNS0yMCAyMC0yMHMzMyAxNC43NzUgMzMgMzN6IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjgiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxjaXJjbGUgY3g9IjU1IiBjeT0iNzIiIHI9IjMiIGZpbGw9IndoaXRlIi8+PGNpcmNsZSBjeD0iNzIiIGN5PSI3MiIgcj0iMyIgZmlsbD0id2hpdGUiLz48Y2lyY2xlIGN4PSI4OSIgY3k9IjcyIiByPSIzIiBmaWxsPSJ3aGl0ZSIvPjwvc3ZnPg==';
+
+      console.log("Chat Power-Up: Initialisation du connecteur...");
 
       window.TrelloPowerUp.initialize({
         'board-buttons': function (t, opts) {
+          console.log("Chat Power-Up: Demande d'affichage du bouton de tableau.");
           return [{
-            icon: CHAT_ICON,
+            icon: {
+              dark: CHAT_ICON_DATA,
+              light: CHAT_ICON_DATA
+            },
             text: 'Chat',
             callback: function (t) {
               return t.modal({
