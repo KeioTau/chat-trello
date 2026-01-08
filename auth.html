@@ -4,19 +4,64 @@
 <head>
   <meta charset="utf-8">
   <title>Autorisation Chat Board Pro</title>
-  <!-- On charge la librairie Trello -->
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <style>
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #172b4d;
+      background-color: #f4f5f7;
+    }
+    .loader {
+      border: 4px solid #ebecf0;
+      border-top: 4px solid #0079bf;
+      border-radius: 50%;
+      width: 30px;
+      height: 30px;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
 </head>
 <body>
+  <div class="loader"></div>
+  
   <script>
-    // Initialisation du helper d'authentification
-    var t = window.TrelloPowerUp.auth();
+    // On attend que le DOM soit prêt
+    window.addEventListener('load', function() {
+      try {
+        // Tentative d'initialisation via .auth() ou .iframe() (fallback plus sûr)
+        var t = window.TrelloPowerUp.auth ? window.TrelloPowerUp.auth() : window.TrelloPowerUp.iframe();
+        
+        if (!t || typeof t.authorize !== 'function') {
+          console.error("L'objet Trello n'a pas pu être initialisé correctement.");
+          document.body.innerHTML = "<p style='color:red; padding: 20px; text-align:center;'>Erreur de connexion avec Trello. Veuillez fermer cette fenêtre et réessayer.</p>";
+          return;
+        }
 
-    // Cette fonction est appelée par Trello pour obtenir l'URL finale de l'autorisation
-    t.authorize(function(secret) {
-      // Pour un Power-Up simple, on utilise l'URL d'autorisation standard de Trello
-      // On demande l'accès en lecture/écriture avec une expiration "jamais"
-      return 'https://trello.com/1/authorize?expiration=never&name=Chat%20Board%20Pro&scope=read,write&response_type=token&key=' + secret + '&callback_method=postMessage';
+        t.authorize(function(secret) {
+          // Construction de l'URL d'autorisation officielle de Trello
+          // key: le secret fourni par Trello pour identifier la session
+          // callback_method: postMessage est crucial pour que le popup communique avec l'app parente
+          return 'https://trello.com/1/authorize?' + 
+            'expiration=never' + 
+            '&name=Chat%20Board%20Pro' + 
+            '&scope=read,write' + 
+            '&response_type=token' + 
+            '&key=' + secret + 
+            '&callback_method=postMessage';
+        });
+      } catch (e) {
+        console.error("Erreur critique dans auth.html:", e);
+        document.body.innerHTML = "<p>Une erreur est survenue lors de l'authentification.</p>";
+      }
     });
   </script>
 </body>
