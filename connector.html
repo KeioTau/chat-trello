@@ -7,13 +7,15 @@
   </head>
   <body>
     <script>
+      // Icône de chat en SVG (Data URI) pour garantir l'affichage sans dépendance externe
+      var CHAT_ICON = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTIxIDExLjVDMjEgMTYuMTk1IDE3LjE5NSAyMCAxMi41IDIwSDEyTDggMjRWMjBDNC44MDUgMjAgMSAxNi4xOTUgMSAxMS41QzEgNi44MDUgNC44MDUgMyAxMi41IDNDMTcuMTk1IDMgMjEgNi44MDUgMjEgMTEuNVoiLz48L3N2Zz4=';
+
       window.TrelloPowerUp.initialize({
         'board-buttons': function (t, opts) {
           return [{
-            // Icône Chat (MessageSquare simplifiée)
             icon: {
-              dark: 'https://cdn-icons-png.flaticon.com/512/589/589708.png',
-              light: 'https://cdn-icons-png.flaticon.com/512/589/589708.png'
+              dark: CHAT_ICON,
+              light: CHAT_ICON
             },
             text: 'Chat',
             callback: function (t) {
@@ -25,6 +27,13 @@
               });
             }
           }];
+        },
+        'show-settings': function (t, opts) {
+          return t.popup({
+            title: 'Configuration Chat',
+            url: './index.html', // On peut réutiliser la même page ou une page dédiée
+            height: 184
+          });
         }
       });
     </script>
