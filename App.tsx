@@ -15,7 +15,7 @@ import {
   Lock
 } from 'lucide-react';
 
-// Initialisation de l'objet Trello - Utilisation de iframe() par défaut
+// Initialisation de l'objet Trello
 const t = (window as any).TrelloPowerUp.iframe();
 
 export default function App() {
@@ -44,17 +44,9 @@ export default function App() {
     setNeedsAuth(false);
     
     try {
-      let me;
-      try {
-        // Tentative de récupération du membre actuel
-        me = await t.member('id', 'fullName', 'username', 'initials', 'avatarUrl');
-      } catch (authErr) {
-        console.warn("Permission Trello manquante");
-        setNeedsAuth(true);
-        setIsLoading(false);
-        return;
-      }
-
+      // On vérifie si on a accès aux données de base
+      const me = await t.member('id', 'fullName', 'username', 'initials', 'avatarUrl').catch(() => null);
+      
       if (!me || !me.id) {
         setNeedsAuth(true);
         setIsLoading(false);
@@ -103,21 +95,22 @@ export default function App() {
 
   const handleAuthorize = async () => {
     try {
-      // Calcul de l'URL absolue pour auth.html (indispensable pour Firefox)
+      // URL absolue pour éviter tout problème
       const authUrl = window.location.origin + '/auth.html';
       
       await t.authorize(authUrl, {
         height: 680,
         width: 580,
-        validToken: (token: string) => token && token.length > 0
+        validToken: (token: string) => {
+          return token && token.length > 10;
+        }
       });
       
-      // Si on arrive ici, l'auth est réussie
-      initTrello();
+      // Petit délai pour laisser Trello enregistrer le token
+      setTimeout(initTrello, 500);
     } catch (err) {
       console.error("Échec autorisation:", err);
-      // Fallback si la popup est toujours bloquée
-      alert("La fenêtre de connexion n'a pas pu s'ouvrir. Vérifiez que les popups sont autorisées dans la barre d'adresse de votre navigateur (icône à droite ou à gauche de l'URL).");
+      // Ne rien faire ici, l'utilisateur verra le message dans la popup ou pourra retenter
     }
   };
 
@@ -219,7 +212,7 @@ export default function App() {
     return (
       <div className="h-full w-full flex flex-col items-center justify-center bg-white gap-4">
         <Loader2 className="animate-spin text-[#0079bf]" size={40} />
-        <p className="text-slate-500 font-medium animate-pulse">Chargement...</p>
+        <p className="text-slate-500 font-medium animate-pulse">Chargement du tchat...</p>
       </div>
     );
   }
@@ -230,28 +223,15 @@ export default function App() {
         <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-6">
           <Lock size={32} />
         </div>
-        <h2 className="font-bold text-xl mb-2 text-slate-800 uppercase tracking-tight">Connexion requise</h2>
+        <h2 className="font-bold text-xl mb-2 text-slate-800 uppercase tracking-tight">Accès restreint</h2>
         <p className="text-slate-500 mb-8 max-w-xs mx-auto font-medium">
-          Cliquez ci-dessous pour autoriser le tchat sur votre tableau Trello.
+          Pour discuter avec les membres, vous devez autoriser le Power-Up à accéder aux informations du tableau.
         </p>
         <button 
           onClick={handleAuthorize} 
           className="w-full max-w-xs bg-[#0079bf] text-white px-6 py-4 rounded-xl font-bold shadow-lg hover:bg-[#026aa7] transition-all flex items-center justify-center gap-2"
         >
           Se connecter à Trello
-        </button>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="h-full w-full flex flex-col items-center justify-center bg-white p-8 text-center">
-        <X size={48} className="mx-auto text-red-500 mb-4" />
-        <h2 className="font-bold text-xl mb-2">Erreur</h2>
-        <p className="text-slate-500 mb-6 font-medium">{error}</p>
-        <button onClick={initTrello} className="flex items-center gap-2 bg-[#0079bf] text-white px-8 py-3 rounded-xl font-bold shadow-md hover:bg-[#026aa7]">
-          <RefreshCw size={18} /> Réessayer
         </button>
       </div>
     );
