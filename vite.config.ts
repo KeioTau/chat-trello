@@ -7,9 +7,9 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
-        // On définit les deux fichiers HTML comme points d'entrée
         main: './index.html',
-        connector: './connector.html'
+        connector: './connector.html',
+        auth: './auth.html'
       }
     }
   }

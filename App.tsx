@@ -47,9 +47,10 @@ export default function App() {
       // 1. Tenter de récupérer l'utilisateur actuel (test d'autorisation)
       let me;
       try {
+        // On demande juste l'ID pour vérifier si on a accès
         me = await t.member('id', 'fullName', 'username', 'initials', 'avatarUrl');
       } catch (authErr) {
-        console.warn("Autorisation manquante pour t.member");
+        console.warn("Accès refusé ou autorisation nécessaire");
         setNeedsAuth(true);
         setIsLoading(false);
         return;
@@ -72,7 +73,6 @@ export default function App() {
 
       // 2. Récupérer les membres du tableau
       const membersData = await t.board('members');
-      // Trello peut renvoyer { members: [...] } ou [...] directement selon le contexte
       const rawMembers = Array.isArray(membersData) ? membersData : (membersData.members || []);
 
       const formattedMembers = rawMembers.map((m: any) => ({
@@ -96,8 +96,13 @@ export default function App() {
       setBoardMembers([...formattedMembers, aiBot]);
 
     } catch (err: any) {
-      console.error("Erreur d'initialisation Trello détaillée:", err);
-      setError("Impossible de charger les données du tableau. Vérifiez vos permissions.");
+      console.error("Erreur d'initialisation Trello:", err);
+      // Si l'erreur contient "member", c'est qu'on a besoin d'auth
+      if (err.toString().includes('member') || err.toString().includes('Command')) {
+        setNeedsAuth(true);
+      } else {
+        setError("Impossible de charger les données du tableau.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -105,16 +110,20 @@ export default function App() {
 
   const handleAuthorize = async () => {
     try {
-      await t.authorize({
-        type: 'popup',
-        name: 'Chat Board Pro',
-        expiration: 'never',
-        scope: 'read,write'
+      // On utilise le chemin relatif vers auth.html généré par Vite
+      await t.authorize('./auth.html', {
+        height: 680,
+        width: 580,
+        validToken: function(token: string) {
+          return token && token.length > 0;
+        }
       });
-      // Recharger après autorisation
+      // Recharger les données après le succès du popup
       initTrello();
     } catch (err) {
-      console.error("Erreur lors de l'autorisation:", err);
+      console.error("Échec de l'autorisation:", err);
+      // Parfois le popup est bloqué par le navigateur
+      alert("La fenêtre d'autorisation a été bloquée. Veuillez autoriser les popups pour ce site.");
     }
   };
 
@@ -227,15 +236,15 @@ export default function App() {
         <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-6">
           <Lock size={32} />
         </div>
-        <h2 className="font-bold text-xl mb-2 text-slate-800">Autorisation requise</h2>
-        <p className="text-slate-500 mb-8 max-w-xs mx-auto">
-          Pour discuter avec les autres membres, nous avons besoin de savoir qui vous êtes sur ce tableau.
+        <h2 className="font-bold text-xl mb-2 text-slate-800 uppercase tracking-tight">Autorisation requise</h2>
+        <p className="text-slate-500 mb-8 max-w-xs mx-auto font-medium">
+          Trello demande votre permission pour que nous puissions identifier les membres du tableau dans le chat.
         </p>
         <button 
           onClick={handleAuthorize} 
-          className="w-full max-w-xs bg-[#0079bf] text-white px-6 py-4 rounded-xl font-bold shadow-lg hover:bg-[#026aa7] transition-all flex items-center justify-center gap-2"
+          className="w-full max-w-xs bg-[#0079bf] text-white px-6 py-4 rounded-xl font-bold shadow-lg hover:bg-[#026aa7] hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
         >
-          Autoriser l'accès
+          Autoriser et Commencer
         </button>
       </div>
     );
@@ -248,8 +257,8 @@ export default function App() {
           <X size={48} className="mx-auto" />
         </div>
         <h2 className="font-bold text-xl mb-2">Oups !</h2>
-        <p className="text-slate-500 mb-6">{error}</p>
-        <button onClick={initTrello} className="flex items-center gap-2 bg-[#0079bf] text-white px-6 py-2 rounded-lg font-bold">
+        <p className="text-slate-500 mb-6 font-medium">{error}</p>
+        <button onClick={initTrello} className="flex items-center gap-2 bg-[#0079bf] text-white px-8 py-3 rounded-xl font-bold shadow-md hover:bg-[#026aa7]">
           <RefreshCw size={18} /> Réessayer
         </button>
       </div>
@@ -349,7 +358,7 @@ export default function App() {
                 placeholder="Écrivez ici..."
                 className="flex-1 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#0079bf] outline-none transition-all"
               />
-              <button type="submit" disabled={!inputText.trim()} className="bg-[#0079bf] text-white p-3 rounded-xl hover:bg-[#026aa7] disabled:bg-slate-200 shadow-md">
+              <button type="submit" disabled={!inputText.trim()} className="bg-[#0079bf] text-white p-3 rounded-xl hover:bg-[#026aa7] disabled:bg-slate-200 shadow-md transition-colors">
                 <Send size={20} fill="currentColor" />
               </button>
             </form>

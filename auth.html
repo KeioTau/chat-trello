@@ -1,0 +1,23 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Autorisation Chat Board Pro</title>
+  <!-- On charge la librairie Trello -->
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+</head>
+<body>
+  <script>
+    // Initialisation du helper d'authentification
+    var t = window.TrelloPowerUp.auth();
+
+    // Cette fonction est appelée par Trello pour obtenir l'URL finale de l'autorisation
+    t.authorize(function(secret) {
+      // Pour un Power-Up simple, on utilise l'URL d'autorisation standard de Trello
+      // On demande l'accès en lecture/écriture avec une expiration "jamais"
+      return 'https://trello.com/1/authorize?expiration=never&name=Chat%20Board%20Pro&scope=read,write&response_type=token&key=' + secret + '&callback_method=postMessage';
+    });
+  </script>
+</body>
+</html>
