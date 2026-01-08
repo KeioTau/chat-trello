@@ -15,7 +15,7 @@ import {
   Lock
 } from 'lucide-react';
 
-// Initialisation de l'objet Trello
+// Initialisation de l'objet Trello - Utilisation de iframe() par défaut
 const t = (window as any).TrelloPowerUp.iframe();
 
 export default function App() {
@@ -44,13 +44,12 @@ export default function App() {
     setNeedsAuth(false);
     
     try {
-      // 1. Tenter de récupérer l'utilisateur actuel (test d'autorisation)
       let me;
       try {
-        // On demande juste l'ID pour vérifier si on a accès
+        // Tentative de récupération du membre actuel
         me = await t.member('id', 'fullName', 'username', 'initials', 'avatarUrl');
       } catch (authErr) {
-        console.warn("Accès refusé ou autorisation nécessaire");
+        console.warn("Permission Trello manquante");
         setNeedsAuth(true);
         setIsLoading(false);
         return;
@@ -71,7 +70,6 @@ export default function App() {
         color: 'bg-gray-800'
       });
 
-      // 2. Récupérer les membres du tableau
       const membersData = await t.board('members');
       const rawMembers = Array.isArray(membersData) ? membersData : (membersData.members || []);
 
@@ -96,13 +94,8 @@ export default function App() {
       setBoardMembers([...formattedMembers, aiBot]);
 
     } catch (err: any) {
-      console.error("Erreur d'initialisation Trello:", err);
-      // Si l'erreur contient "member", c'est qu'on a besoin d'auth
-      if (err.toString().includes('member') || err.toString().includes('Command')) {
-        setNeedsAuth(true);
-      } else {
-        setError("Impossible de charger les données du tableau.");
-      }
+      console.error("Erreur init:", err);
+      setNeedsAuth(true);
     } finally {
       setIsLoading(false);
     }
@@ -110,20 +103,21 @@ export default function App() {
 
   const handleAuthorize = async () => {
     try {
-      // On utilise le chemin relatif vers auth.html généré par Vite
-      await t.authorize('./auth.html', {
+      // Calcul de l'URL absolue pour auth.html (indispensable pour Firefox)
+      const authUrl = window.location.origin + '/auth.html';
+      
+      await t.authorize(authUrl, {
         height: 680,
         width: 580,
-        validToken: function(token: string) {
-          return token && token.length > 0;
-        }
+        validToken: (token: string) => token && token.length > 0
       });
-      // Recharger les données après le succès du popup
+      
+      // Si on arrive ici, l'auth est réussie
       initTrello();
     } catch (err) {
-      console.error("Échec de l'autorisation:", err);
-      // Parfois le popup est bloqué par le navigateur
-      alert("La fenêtre d'autorisation a été bloquée. Veuillez autoriser les popups pour ce site.");
+      console.error("Échec autorisation:", err);
+      // Fallback si la popup est toujours bloquée
+      alert("La fenêtre de connexion n'a pas pu s'ouvrir. Vérifiez que les popups sont autorisées dans la barre d'adresse de votre navigateur (icône à droite ou à gauche de l'URL).");
     }
   };
 
@@ -214,7 +208,7 @@ export default function App() {
           lastActivity: Date.now()
         } : r));
       } catch (err) {
-        console.error("Erreur AI:", err);
+        console.error("AI Error:", err);
       } finally {
         setIsTyping(false);
       }
@@ -225,7 +219,7 @@ export default function App() {
     return (
       <div className="h-full w-full flex flex-col items-center justify-center bg-white gap-4">
         <Loader2 className="animate-spin text-[#0079bf]" size={40} />
-        <p className="text-slate-500 font-medium animate-pulse">Initialisation du Chat...</p>
+        <p className="text-slate-500 font-medium animate-pulse">Chargement...</p>
       </div>
     );
   }
@@ -236,15 +230,15 @@ export default function App() {
         <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-6">
           <Lock size={32} />
         </div>
-        <h2 className="font-bold text-xl mb-2 text-slate-800 uppercase tracking-tight">Autorisation requise</h2>
+        <h2 className="font-bold text-xl mb-2 text-slate-800 uppercase tracking-tight">Connexion requise</h2>
         <p className="text-slate-500 mb-8 max-w-xs mx-auto font-medium">
-          Trello demande votre permission pour que nous puissions identifier les membres du tableau dans le chat.
+          Cliquez ci-dessous pour autoriser le tchat sur votre tableau Trello.
         </p>
         <button 
           onClick={handleAuthorize} 
-          className="w-full max-w-xs bg-[#0079bf] text-white px-6 py-4 rounded-xl font-bold shadow-lg hover:bg-[#026aa7] hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
+          className="w-full max-w-xs bg-[#0079bf] text-white px-6 py-4 rounded-xl font-bold shadow-lg hover:bg-[#026aa7] transition-all flex items-center justify-center gap-2"
         >
-          Autoriser et Commencer
+          Se connecter à Trello
         </button>
       </div>
     );
@@ -253,10 +247,8 @@ export default function App() {
   if (error) {
     return (
       <div className="h-full w-full flex flex-col items-center justify-center bg-white p-8 text-center">
-        <div className="text-red-500 mb-4">
-          <X size={48} className="mx-auto" />
-        </div>
-        <h2 className="font-bold text-xl mb-2">Oups !</h2>
+        <X size={48} className="mx-auto text-red-500 mb-4" />
+        <h2 className="font-bold text-xl mb-2">Erreur</h2>
         <p className="text-slate-500 mb-6 font-medium">{error}</p>
         <button onClick={initTrello} className="flex items-center gap-2 bg-[#0079bf] text-white px-8 py-3 rounded-xl font-bold shadow-md hover:bg-[#026aa7]">
           <RefreshCw size={18} /> Réessayer
@@ -266,7 +258,7 @@ export default function App() {
   }
 
   return (
-    <div id="root" className="flex h-[600px] w-full bg-[#f4f5f7] text-slate-900 overflow-hidden">
+    <div id="root" className="flex h-full w-full bg-[#f4f5f7] text-slate-900 overflow-hidden">
       {/* Sidebar */}
       <div className={`w-72 flex flex-col border-r border-[#dfe1e6] bg-white shrink-0 transition-all ${activeRoomId ? 'hidden md:flex' : 'flex w-full'}`}>
         <div className="p-4 bg-[#0079bf] text-white flex justify-between items-center shrink-0 shadow-md">
@@ -284,7 +276,7 @@ export default function App() {
             <div className="p-12 text-center text-slate-400">
               <MessageSquare size={48} className="mx-auto mb-4 opacity-10" />
               <p className="text-sm font-medium">Aucun tchat ouvert</p>
-              <button onClick={() => setIsCreatingChat(true)} className="mt-4 text-xs font-bold text-[#0079bf] hover:underline uppercase tracking-wider">Démarrer une discussion</button>
+              <button onClick={() => setIsCreatingChat(true)} className="mt-4 text-xs font-bold text-[#0079bf] hover:underline uppercase tracking-wider">Nouveau message</button>
             </div>
           ) : (
             rooms.sort((a,b) => b.lastActivity - a.lastActivity).map(room => (
@@ -299,7 +291,7 @@ export default function App() {
                 <div className="flex-1 truncate">
                   <p className="font-bold text-sm truncate text-slate-800">{room.name}</p>
                   <p className="text-xs text-slate-500 truncate mt-0.5">
-                    {room.messages.length > 0 ? room.messages[room.messages.length - 1].text : 'Envoyer un premier message...'}
+                    {room.messages.length > 0 ? room.messages[room.messages.length - 1].text : 'Commencer à discuter...'}
                   </p>
                 </div>
               </button>
@@ -355,7 +347,7 @@ export default function App() {
               <input
                 value={inputText}
                 onChange={e => setInputText(e.target.value)}
-                placeholder="Écrivez ici..."
+                placeholder="Votre message..."
                 className="flex-1 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#0079bf] outline-none transition-all"
               />
               <button type="submit" disabled={!inputText.trim()} className="bg-[#0079bf] text-white p-3 rounded-xl hover:bg-[#026aa7] disabled:bg-slate-200 shadow-md transition-colors">
@@ -365,11 +357,11 @@ export default function App() {
           </>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-12 bg-[#f4f5f7]">
-             <div className="w-20 h-20 bg-[#0079bf] rounded-full flex items-center justify-center mb-6 shadow-xl animate-bounce">
+             <div className="w-20 h-20 bg-[#0079bf] rounded-full flex items-center justify-center mb-6 shadow-xl">
                <MessageSquare size={36} className="text-white" />
              </div>
              <h3 className="font-bold text-xl text-slate-800 uppercase tracking-tight">Messagerie Interne</h3>
-             <p className="text-slate-500 text-sm max-w-xs mt-2 mb-8 font-medium">Collaborez instantanément avec les {boardMembers.length > 0 ? boardMembers.length - 1 : 'autres'} membres de ce tableau.</p>
+             <p className="text-slate-500 text-sm max-w-xs mt-2 mb-8 font-medium">Commencez une discussion avec les autres membres de ce tableau.</p>
              <button onClick={() => setIsCreatingChat(true)} className="px-10 py-3 bg-[#0079bf] text-white font-bold rounded-xl shadow-lg hover:scale-105 active:scale-95 transition-all">
                NOUVEAU MESSAGE
              </button>
@@ -385,13 +377,13 @@ export default function App() {
                 <X size={20}/>
               </button>
             </div>
-            <div className="p-4 bg-slate-50 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Choisissez vos collaborateurs</div>
+            <div className="p-4 bg-slate-50 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Choisir les participants</div>
             <div className="flex-1 overflow-y-auto p-2">
               {boardMembers.filter(m => m.id !== currentUser?.id).map(m => (
                 <button
                   key={m.id}
                   onClick={() => setSelectedMembers(prev => prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id])}
-                  className={`w-full p-3 rounded-xl flex items-center gap-4 mb-1 transition-all ${selectedMembers.includes(m.id) ? 'bg-blue-50 border border-[#0079bf]/30 shadow-inner' : 'hover:bg-slate-50'}`}
+                  className={`w-full p-3 rounded-xl flex items-center gap-4 mb-1 transition-all ${selectedMembers.includes(m.id) ? 'bg-blue-50 border border-[#0079bf]/30' : 'hover:bg-slate-50'}`}
                 >
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold shadow-sm ${m.color}`}>
                     {m.initials}
@@ -408,9 +400,9 @@ export default function App() {
               <button 
                 onClick={createRoom} 
                 disabled={selectedMembers.length === 0}
-                className="w-full bg-[#0079bf] text-white py-4 rounded-xl font-bold shadow-lg disabled:bg-slate-200 transition-all hover:bg-[#026aa7]"
+                className="w-full bg-[#0079bf] text-white py-4 rounded-xl font-bold shadow-lg disabled:bg-slate-200 transition-all"
               >
-                {selectedMembers.length > 1 ? `Lancer le groupe (${selectedMembers.length + 1} pers.)` : "Démarrer le chat"}
+                {selectedMembers.length > 1 ? `Créer le groupe` : "Démarrer le chat"}
               </button>
             </div>
           </div>
