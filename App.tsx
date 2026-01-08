@@ -2,20 +2,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Message, ChatRoom } from './types';
 import { CURRENT_USER, MOCK_BOARD_MEMBERS } from './constants';
-import { getGeminiResponse } from './services/geminiService';
+import { getGeminiResponse } from './geminiService';
 import { 
   Plus, 
   Send, 
-  Search, 
   MessageSquare, 
   Users, 
   X, 
-  Settings,
-  MoreVertical,
-  CheckCircle2,
-  Paperclip,
   RefreshCw,
-  Info
+  Info,
+  CheckCircle2
 } from 'lucide-react';
 
 declare var TrelloPowerUp: any;
@@ -35,12 +31,26 @@ export default function App() {
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Correction cruciale pour la hauteur Trello
   useEffect(() => {
-    if (typeof TrelloPowerUp !== 'undefined') {
-      const t = TrelloPowerUp.iframe();
-      t.sizeTo('#root').done();
-    }
-  }, []);
+    const t = (window as any).TrelloPowerUp ? (window as any).TrelloPowerUp.iframe() : null;
+    
+    const handleResize = () => {
+      if (t) {
+        t.sizeTo('#root').done();
+      }
+    };
+
+    // Redimensionner au chargement et lors de chaque mise à jour de rendu
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    const interval = setInterval(handleResize, 1000); // Sécurité supplémentaire
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      clearInterval(interval);
+    };
+  }, [rooms, activeRoomId, isCreatingChat]);
 
   useEffect(() => {
     localStorage.setItem('trello_chat_rooms', JSON.stringify(rooms));
@@ -68,7 +78,7 @@ export default function App() {
     const newRoom: ChatRoom = {
       id: `room_${Date.now()}`,
       name: selectedMembers.length > 1 
-        ? `Groupe: ${selectedMembers.map(id => MOCK_BOARD_MEMBERS.find(m => m.id === id)?.fullName.split(' ')[0]).join(', ')}`
+        ? `Groupe (${selectedMembers.length})`
         : MOCK_BOARD_MEMBERS.find(m => m.id === selectedMembers[0])?.fullName || 'Chat',
       memberIds: [...selectedMembers, CURRENT_USER.id],
       messages: [],
@@ -93,28 +103,22 @@ export default function App() {
       timestamp: Date.now()
     };
 
-    const updatedText = inputText;
+    const currentText = inputText;
     setInputText('');
 
-    setRooms(prev => prev.map(r => {
-      if (r.id === activeRoomId) {
-        return {
-          ...r,
-          messages: [...r.messages, newMessage],
-          lastActivity: Date.now()
-        };
-      }
-      return r;
-    }));
+    setRooms(prev => prev.map(r => r.id === activeRoomId ? {
+      ...r,
+      messages: [...r.messages, newMessage],
+      lastActivity: Date.now()
+    } : r));
 
-    const currentRoom = rooms.find(r => r.id === activeRoomId);
-    if (currentRoom?.memberIds.includes('user_4')) {
+    if (activeRoom?.memberIds.includes('user_4')) {
       setIsTyping(true);
-      const history = currentRoom.messages.slice(-10).map(m => ({
+      const history = activeRoom.messages.slice(-5).map(m => ({
         role: m.senderId === CURRENT_USER.id ? 'user' as const : 'model' as const,
         text: m.text
       }));
-      const response = await getGeminiResponse(updatedText, history);
+      const response = await getGeminiResponse(currentText, history);
       const aiMessage: Message = {
         id: `msg_ai_${Date.now()}`,
         senderId: 'user_4',
@@ -122,192 +126,104 @@ export default function App() {
         timestamp: Date.now()
       };
       setIsTyping(false);
-      setRooms(prev => prev.map(r => {
-        if (r.id === activeRoomId) {
-          return {
-            ...r,
-            messages: [...r.messages, aiMessage],
-            lastActivity: Date.now()
-          };
-        }
-        return r;
-      }));
+      setRooms(prev => prev.map(r => r.id === activeRoomId ? {
+        ...r,
+        messages: [...r.messages, aiMessage],
+        lastActivity: Date.now()
+      } : r));
     }
   };
 
-  const simulateRefresh = () => {
-    setIsSyncing(true);
-    setTimeout(() => setIsSyncing(false), 1000);
-  };
-
   return (
-    <div className="flex h-screen w-full bg-[#f4f5f7] text-gray-900">
+    <div id="root" className="flex h-screen w-full bg-[#f4f5f7] text-slate-900 overflow-hidden">
       {/* Sidebar */}
-      <div className="w-80 flex flex-col border-r border-[#dfe1e6] bg-white">
-        <div className="p-4 border-b border-[#dfe1e6] flex justify-between items-center bg-[#0079bf] text-white">
-          <div className="flex items-center gap-2">
-            <MessageSquare size={20} />
-            <h1 className="font-bold text-lg">Board Chat</h1>
+      <div className="w-72 flex flex-col border-r border-[#dfe1e6] bg-white shrink-0">
+        <div className="p-4 bg-[#0079bf] text-white flex justify-between items-center shrink-0">
+          <div className="flex items-center gap-2 font-bold">
+            <MessageSquare size={18} />
+            <span>Chat</span>
           </div>
-          <button onClick={() => setIsCreatingChat(true)} className="p-1 hover:bg-white/20 rounded transition-colors">
+          <button onClick={() => setIsCreatingChat(true)} className="p-1 hover:bg-white/20 rounded">
             <Plus size={20} />
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {rooms.length === 0 ? (
-            <div className="p-8 text-center text-gray-500 mt-10">
-              <Users size={48} className="mx-auto mb-4 opacity-20" />
-              <p className="text-sm">Aucune discussion.</p>
-              <button onClick={() => setIsCreatingChat(true)} className="mt-4 text-[#0079bf] font-medium hover:underline text-sm">
-                Nouveau chat
-              </button>
-            </div>
-          ) : (
-            rooms.sort((a, b) => b.lastActivity - a.lastActivity).map(room => (
-              <button
-                key={room.id}
-                onClick={() => setActiveRoomId(room.id)}
-                className={`w-full p-4 flex items-center gap-3 border-b border-[#ebecf0] hover:bg-[#f4f5f7] transition-colors text-left ${activeRoomId === room.id ? 'bg-[#e4f0f6] border-l-4 border-l-[#0079bf]' : ''}`}
-              >
-                <div className="relative">
-                  {room.isGroup ? (
-                    <div className="w-10 h-10 rounded-lg bg-gray-200 flex items-center justify-center text-gray-500"><Users size={20} /></div>
-                  ) : (
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${MOCK_BOARD_MEMBERS.find(m => room.memberIds.includes(m.id))?.color || 'bg-gray-400'}`}>
-                      {MOCK_BOARD_MEMBERS.find(m => room.memberIds.includes(m.id))?.initials}
-                    </div>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-gray-900 truncate text-sm">{room.name}</p>
-                  <p className="text-xs text-gray-500 truncate">{room.messages.length > 0 ? room.messages[room.messages.length - 1].text : 'Pas de message'}</p>
-                </div>
-              </button>
-            ))
-          )}
-        </div>
-
-        {/* Status Bar */}
-        <div className="px-4 py-2 bg-[#f4f5f7] border-t border-[#dfe1e6] flex items-center justify-between text-[10px] text-gray-500">
-          <div className="flex items-center gap-1">
-            <span className={`w-1.5 h-1.5 rounded-full ${isSyncing ? 'bg-blue-400 animate-pulse' : 'bg-green-500'}`}></span>
-            <span>Version 1.0.3 - Live</span>
-          </div>
-          <button onClick={simulateRefresh} className="hover:text-[#0079bf] transition-colors">
-            <RefreshCw size={10} className={isSyncing ? 'animate-spin' : ''} />
-          </button>
+          {rooms.map(room => (
+            <button
+              key={room.id}
+              onClick={() => setActiveRoomId(room.id)}
+              className={`w-full p-3 flex items-center gap-3 border-b border-[#ebecf0] hover:bg-slate-50 text-left ${activeRoomId === room.id ? 'bg-blue-50' : ''}`}
+            >
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold ${room.isGroup ? 'bg-slate-400' : 'bg-blue-600'}`}>
+                {room.isGroup ? 'G' : 'C'}
+              </div>
+              <div className="flex-1 truncate">
+                <p className="font-bold text-sm truncate">{room.name}</p>
+              </div>
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col relative bg-white">
+      {/* Main */}
+      <div className="flex-1 flex flex-col bg-white overflow-hidden relative">
         {activeRoom ? (
           <>
-            <div className="p-4 border-b border-[#dfe1e6] flex justify-between items-center shadow-sm z-10">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-[#ebecf0] flex items-center justify-center text-[#42526e]">
-                  {activeRoom.isGroup ? <Users size={16} /> : <MessageSquare size={16} />}
-                </div>
-                <div>
-                  <h2 className="font-bold text-gray-800 leading-tight">{activeRoom.name}</h2>
-                  <p className="text-[10px] text-gray-400">{activeRoom.memberIds.length} membres</p>
-                </div>
-              </div>
-              <Info size={18} className="text-gray-300 cursor-help hover:text-gray-500" />
+            <div className="p-3 border-b flex justify-between items-center shrink-0">
+              <span className="font-bold text-sm">{activeRoom.name}</span>
+              <button onClick={() => setActiveRoomId(null)} className="md:hidden"><X size={18}/></button>
             </div>
-
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#f4f5f7]/30">
-              {activeRoom.messages.map((msg, i) => {
-                const isMe = msg.senderId === CURRENT_USER.id;
-                const sender = MOCK_BOARD_MEMBERS.find(m => m.id === msg.senderId) || CURRENT_USER;
-                const prevMsg = activeRoom.messages[i - 1];
-                const showHeader = !prevMsg || prevMsg.senderId !== msg.senderId;
-
-                return (
-                  <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} ${!showHeader ? '-mt-3' : ''}`}>
-                    {showHeader && (
-                      <div className="flex items-center gap-2 mb-1 px-1">
-                        {!isMe && <span className="text-[10px] font-bold text-gray-600">{sender.fullName}</span>}
-                        <span className="text-[9px] text-gray-400">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                        {isMe && <span className="text-[10px] font-bold text-gray-600">Moi</span>}
-                      </div>
-                    )}
-                    <div className="flex gap-2 max-w-[75%]">
-                      {!isMe && showHeader && (
-                        <div className={`w-6 h-6 rounded-full ${sender.color} flex items-center justify-center text-[10px] text-white font-bold flex-shrink-0 mt-1`}>
-                          {sender.initials}
-                        </div>
-                      )}
-                      {!isMe && !showHeader && <div className="w-6 flex-shrink-0" />}
-                      <div className={`p-3 rounded-2xl shadow-sm text-sm ${isMe ? 'bg-[#0079bf] text-white rounded-tr-none' : 'bg-white text-gray-800 rounded-tl-none border border-[#dfe1e6]'}`}>
-                        {msg.text}
-                      </div>
-                    </div>
+            
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
+              {activeRoom.messages.map(msg => (
+                <div key={msg.id} className={`flex flex-col ${msg.senderId === CURRENT_USER.id ? 'items-end' : 'items-start'}`}>
+                  <div className={`p-2 rounded-lg text-sm max-w-[85%] ${msg.senderId === CURRENT_USER.id ? 'bg-[#0079bf] text-white' : 'bg-white border text-slate-800'}`}>
+                    {msg.text}
                   </div>
-                );
-              })}
-              {isTyping && <div className="text-xs text-gray-400 animate-pulse ml-8 italic">L'IA écrit...</div>}
+                </div>
+              ))}
+              {isTyping && <div className="text-xs text-slate-400 animate-pulse">L'IA écrit...</div>}
               <div ref={messagesEndRef} />
             </div>
 
-            <div className="p-4 bg-white border-t border-[#dfe1e6]">
-              <form onSubmit={handleSendMessage} className="relative flex items-end gap-2">
-                <textarea
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
-                  placeholder="Écrivez un message..."
-                  className="flex-1 p-3 bg-white border border-[#bfc4ce] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0079bf] focus:border-transparent text-gray-900 text-sm shadow-inner resize-none min-h-[44px]"
-                  rows={1}
-                />
-                <button type="submit" disabled={!inputText.trim()} className="p-3 bg-[#0079bf] text-white rounded-xl hover:bg-[#026aa7] disabled:bg-gray-300 transition-colors shadow-md">
-                  <Send size={18} />
-                </button>
-              </form>
-            </div>
+            <form onSubmit={handleSendMessage} className="p-3 border-t flex gap-2 shrink-0">
+              <input
+                value={inputText}
+                onChange={e => setInputText(e.target.value)}
+                placeholder="Votre message..."
+                className="flex-1 border-2 border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-blue-500 outline-none text-black"
+              />
+              <button type="submit" className="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700">
+                <Send size={18} />
+              </button>
+            </form>
           </>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center p-12 text-center text-gray-500">
-            <MessageSquare size={64} className="text-[#0079bf] mb-6 opacity-20" />
-            <h2 className="text-xl font-bold text-gray-800 mb-2">Tchat de Tableau</h2>
-            <p className="max-w-xs mb-8">Collaborez instantanément avec votre équipe.</p>
-            <button onClick={() => setIsCreatingChat(true)} className="px-6 py-3 bg-[#0079bf] text-white font-bold rounded-lg shadow-md hover:bg-[#026aa7] transition-all flex items-center gap-2">
-              <Plus size={20} /> Nouvelle Discussion
-            </button>
+          <div className="flex-1 flex flex-col items-center justify-center text-center p-6">
+            <MessageSquare size={48} className="text-slate-200 mb-4" />
+            <h3 className="font-bold text-slate-800">Sélectionnez une discussion</h3>
+            <button onClick={() => setIsCreatingChat(true)} className="mt-4 text-blue-600 font-bold">Nouvelle discussion</button>
           </div>
         )}
 
-        {/* Modal Nouveau Chat */}
+        {/* Modal simple */}
         {isCreatingChat && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm">
-            <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
-              <div className="p-4 border-b border-[#dfe1e6] flex justify-between items-center bg-[#fafbfc]">
-                <h3 className="font-bold text-gray-800 text-base">Démarrer une discussion</h3>
-                <button onClick={() => setIsCreatingChat(false)} className="text-gray-400 hover:text-gray-600 transition-colors"><X size={20} /></button>
-              </div>
-              <div className="p-4 space-y-2 max-h-64 overflow-y-auto">
-                {MOCK_BOARD_MEMBERS.map(member => (
-                  <button
-                    key={member.id}
-                    onClick={() => setSelectedMembers(prev => prev.includes(member.id) ? prev.filter(id => id !== member.id) : [...prev, member.id])}
-                    className={`w-full p-3 flex items-center gap-3 rounded-xl transition-all ${selectedMembers.includes(member.id) ? 'bg-[#e4f0f6] ring-1 ring-[#0079bf]' : 'hover:bg-[#f4f5f7]'}`}
-                  >
-                    <div className={`w-10 h-10 rounded-full ${member.color} flex items-center justify-center text-white text-xs font-bold`}>{member.initials}</div>
-                    <div className="flex-1 text-left">
-                      <p className="text-sm font-semibold text-gray-900">{member.fullName}</p>
-                      <p className="text-[10px] text-gray-500">@{member.username}</p>
-                    </div>
-                    {selectedMembers.includes(member.id) && <CheckCircle2 size={18} className="text-[#0079bf]" />}
-                  </button>
-                ))}
-              </div>
-              <div className="p-4 border-t flex justify-end gap-2 bg-[#fafbfc]">
-                <button onClick={() => { setIsCreatingChat(false); setSelectedMembers([]); }} className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800">Annuler</button>
-                <button onClick={createRoom} disabled={selectedMembers.length === 0} className="px-6 py-2 bg-[#0079bf] text-white text-sm font-bold rounded-lg shadow-sm hover:bg-[#026aa7] disabled:bg-gray-300">
-                  Créer le tchat
+          <div className="absolute inset-0 bg-white z-50 p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="font-bold">Nouveau chat</h2>
+              <button onClick={() => setIsCreatingChat(false)}><X/></button>
+            </div>
+            <div className="space-y-2">
+              {MOCK_BOARD_MEMBERS.map(m => (
+                <button
+                  key={m.id}
+                  onClick={() => { setSelectedMembers([m.id]); createRoom(); }}
+                  className="w-full p-4 border rounded-xl hover:bg-slate-50 text-left font-bold"
+                >
+                  {m.fullName}
                 </button>
-              </div>
+              ))}
             </div>
           </div>
         )}
