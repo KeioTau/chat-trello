@@ -1,8 +1,0 @@
-{
-  "name": "Trello Chat Power-Up",
-  "description": "A collaborative chat Power-Up for Trello boards allowing direct and group messages between members.",
-  "requestFramePermissions": [
-    "camera",
-    "microphone"
-  ]
-}
